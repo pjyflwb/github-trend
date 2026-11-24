@@ -1,0 +1,903 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GitHub 榜单数据浏览器</title>
+<style>
+  [hidden] { display: none !important; }
+  :root {
+    --bg: #f5f6f8;
+    --surface: #ffffff;
+    --surface-2: #f8f9fb;
+    --border: #e3e6ea;
+    --border-strong: #d3d8df;
+    --text: #1f2328;
+    --muted: #6b7280;
+    --primary: #0969da;
+    --primary-soft: #eaf3ff;
+    --hot: #cf3b2f;
+    --hot-soft: #fff1ef;
+    --shadow: 0 1px 2px rgba(16,24,40,.04), 0 8px 24px rgba(16,24,40,.06);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei",
+          "PingFang SC", "Hiragino Sans GB", Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  body.no-scroll { overflow: hidden; }
+  .wrap { max-width: 1680px; margin: 0 auto; padding: 22px 28px 40px; }
+
+  /* ---------- 顶部 ---------- */
+  .topbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+  .brand { display: flex; align-items: center; gap: 14px; }
+  .logo {
+    width: 44px; height: 44px; border-radius: 12px; flex: none;
+    background: #24292f; color: #fff; font-weight: 700; font-size: 15px;
+    display: flex; align-items: center; justify-content: center; letter-spacing: .5px;
+  }
+  h1 { margin: 0; font-size: 19px; font-weight: 650; letter-spacing: .2px; }
+  .subtitle { margin: 3px 0 0; color: var(--muted); font-size: 12.5px; }
+  .top-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .file-chip {
+    font-size: 12px; color: var(--muted); background: var(--surface);
+    border: 1px solid var(--border); border-radius: 999px; padding: 6px 12px;
+    max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  button, select, input { font-family: inherit; font-size: 13px; color: var(--text); }
+  button { cursor: pointer; }
+  button:disabled { cursor: not-allowed; opacity: .45; }
+  .btn {
+    background: var(--surface); border: 1px solid var(--border-strong); border-radius: 8px;
+    padding: 7px 13px; transition: background .15s, border-color .15s;
+  }
+  .btn:hover:not(:disabled) { background: var(--primary-soft); border-color: #a9cdf7; }
+  .btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .btn.primary:hover:not(:disabled) { background: #0860c4; }
+
+  /* ---------- 页签 ---------- */
+  .tabs { display: flex; gap: 6px; margin: 22px 0 16px; border-bottom: 1px solid var(--border); }
+  .tab {
+    background: transparent; border: 0; border-bottom: 2px solid transparent;
+    padding: 10px 16px 12px; display: flex; align-items: baseline; gap: 9px;
+    color: var(--muted); font-size: 14px; margin-bottom: -1px;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 600; }
+  .tab-count { font-size: 11.5px; color: var(--muted); font-weight: 400; }
+
+  /* ---------- 概览 ---------- */
+  .overview { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
+  .stat {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 10px 16px; min-width: 148px; box-shadow: 0 1px 1px rgba(16,24,40,.02);
+  }
+  .stat-label { font-size: 11.5px; color: var(--muted); margin-bottom: 3px; }
+  .stat-value { font-size: 15px; font-weight: 650; font-variant-numeric: tabular-nums; }
+
+  /* ---------- 工具栏 ---------- */
+  .toolbar {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px 14px; box-shadow: var(--shadow); margin-bottom: 10px;
+  }
+  .search-wrap { position: relative; flex: 1 1 280px; min-width: 220px; display: flex; align-items: center; }
+  .search-wrap .icon { position: absolute; left: 11px; color: var(--muted); font-size: 14px; pointer-events: none; }
+  .search-wrap input {
+    width: 100%; padding: 8px 32px 8px 32px; border: 1px solid var(--border-strong);
+    border-radius: 8px; outline: none; background: var(--surface-2);
+  }
+  .search-wrap input:focus { background: #fff; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(9,105,218,.12); }
+  .clear-x {
+    position: absolute; right: 7px; border: 0; background: transparent; color: var(--muted);
+    font-size: 17px; line-height: 1; padding: 2px 6px; border-radius: 5px;
+  }
+  .clear-x:hover { background: #eceff3; color: var(--text); }
+  .tool-group { display: flex; align-items: center; gap: 6px; }
+  .tool-group > label { font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+  .toolbar select, .toolbar input[type="date"] {
+    border: 1px solid var(--border-strong); border-radius: 8px; padding: 7px 9px;
+    background: var(--surface); outline: none; height: 34px;
+  }
+  .toolbar select:focus, .toolbar input:focus { border-color: var(--primary); }
+  .mini-btn {
+    border: 1px solid var(--border-strong); background: var(--surface); border-radius: 7px;
+    height: 34px; min-width: 32px; padding: 0 9px; color: var(--muted);
+  }
+  .mini-btn:hover:not(:disabled) { background: var(--primary-soft); color: var(--primary); border-color: #a9cdf7; }
+  .sep { width: 1px; height: 24px; background: var(--border); margin: 0 2px; }
+  .col-menu { position: relative; }
+  .col-panel {
+    position: absolute; right: 0; top: calc(100% + 8px); z-index: 20;
+    width: 260px; max-height: 360px; overflow: auto;
+    background: var(--surface); border: 1px solid var(--border-strong); border-radius: 10px;
+    box-shadow: 0 12px 32px rgba(16,24,40,.16); padding: 8px;
+  }
+  .col-item { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; font-size: 13px; cursor: pointer; }
+  .col-item:hover { background: var(--surface-2); }
+  .col-item input { accent-color: var(--primary); }
+  .col-actions { display: flex; gap: 8px; border-top: 1px solid var(--border); margin-top: 6px; padding-top: 8px; }
+  .col-actions button { flex: 1; border: 1px solid var(--border-strong); background: var(--surface-2); border-radius: 6px; padding: 6px; font-size: 12px; }
+  .col-actions button:hover { background: var(--primary-soft); }
+  .meta-line { font-size: 12.5px; color: var(--muted); min-height: 18px; }
+  .status-line { display: flex; align-items: center; justify-content: space-between;
+                 gap: 14px; flex-wrap: wrap; margin: 0 2px 10px; min-height: 24px; }
+  .status-line .meta-line { margin: 0; flex: 1 1 320px; }
+  .zh-box { display: flex; align-items: center; gap: 9px; font-size: 12px;
+            color: var(--muted); white-space: nowrap; }
+  .zh-box b { color: var(--text); font-variant-numeric: tabular-nums; }
+  .zh-bar { width: 96px; height: 6px; border-radius: 999px; background: #e6e9ee; overflow: hidden; }
+  .zh-bar > i { display: block; height: 100%; background: #2da44e;
+                border-radius: 999px; transition: width .35s; }
+  .mini-action { border: 1px solid var(--border-strong); background: var(--surface);
+                 border-radius: 7px; padding: 4px 10px; font-size: 12px; color: var(--primary); }
+  .mini-action:hover:not(:disabled) { background: var(--primary-soft); border-color: #a9cdf7; }
+  .mini-action:disabled { color: var(--muted); }
+
+  /* ---------- 表格 ---------- */
+  .table-wrap {
+    position: relative; overflow: auto; background: var(--surface);
+    border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow);
+    max-height: calc(100vh - 330px); min-height: 260px;
+  }
+  table { border-collapse: separate; border-spacing: 0; width: 100%; font-size: 13px; }
+  thead th {
+    position: sticky; top: 0; z-index: 3; text-align: left;
+    background: #f0f2f5; color: #495057; font-weight: 600; font-size: 12.5px;
+    padding: 10px 12px; border-bottom: 1px solid var(--border-strong);
+    white-space: nowrap;
+  }
+  thead th.th-detail { text-align: center; }
+  tbody td { padding: 9px 12px; border-bottom: 1px solid #eef0f3; vertical-align: middle; }
+  tbody tr:last-child td { border-bottom: 0; }
+  tbody tr:hover { background: #f6faff; cursor: pointer; }
+  tbody tr:hover td { border-bottom-color: #e3edfa; }
+  .muted { color: #a2a9b2; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums;
+           font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; }
+  .hot-badge {
+    display: inline-block; background: var(--hot-soft); color: var(--hot);
+    border: 1px solid #f7d4cf; border-radius: 6px; padding: 1px 8px; font-weight: 650;
+  }
+  .name-cell { font-weight: 550; }
+  .repo-link { color: var(--primary); text-decoration: none; }
+  .repo-link:hover { text-decoration: underline; }
+  .ext { font-size: 10px; margin-left: 4px; color: #9aa4af; }
+  .url-link { color: var(--primary); text-decoration: none; display: block;
+              overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .url-link:hover { text-decoration: underline; }
+  .cell-text { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .detail-btn {
+    border: 1px solid transparent; background: transparent; color: var(--primary);
+    border-radius: 6px; padding: 3px 8px; font-size: 12px; white-space: nowrap;
+  }
+  .detail-btn:hover { background: var(--primary-soft); border-color: #bcd9f8; }
+  .empty { text-align: center; color: var(--muted); padding: 56px 16px; font-size: 13.5px; }
+  #loading {
+    position: sticky; left: 0; top: 0; width: 100%; height: 0; z-index: 5;
+    display: flex; justify-content: center; pointer-events: none;
+  }
+  .loading-pill {
+    margin-top: 60px; background: rgba(31,35,40,.86); color: #fff; border-radius: 999px;
+    padding: 8px 18px; font-size: 12.5px; box-shadow: 0 6px 18px rgba(0,0,0,.18);
+  }
+
+  /* ---------- 分页 ---------- */
+  .pager {
+    display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;
+    padding: 14px 2px 4px;
+  }
+  .pager-info { font-size: 12.5px; color: var(--muted); }
+  .pager-info b { color: var(--text); }
+  .pager-ctrl { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+  .page-btn {
+    min-width: 32px; height: 32px; padding: 0 9px; border: 1px solid var(--border-strong);
+    background: var(--surface); border-radius: 7px; font-size: 12.5px;
+  }
+  .page-btn:hover:not(:disabled):not(.active) { background: var(--primary-soft); border-color: #a9cdf7; }
+  .page-btn.active { background: var(--primary); border-color: var(--primary); color: #fff; font-weight: 600; }
+  .ellipsis { padding: 0 4px; color: var(--muted); }
+  .jump { font-size: 12.5px; color: var(--muted); margin-left: 8px; white-space: nowrap; }
+  .jump input {
+    width: 62px; height: 32px; border: 1px solid var(--border-strong); border-radius: 7px;
+    padding: 0 6px; text-align: center; outline: none;
+  }
+  .jump input:focus { border-color: var(--primary); }
+  .hint { margin-top: 12px; font-size: 12px; color: #9aa1aa; text-align: right; }
+
+  /* ---------- 详情抽屉 ---------- */
+  .backdrop { position: fixed; inset: 0; background: rgba(16,24,40,.38); z-index: 40; }
+  .drawer {
+    position: fixed; right: 0; top: 0; bottom: 0; width: min(560px, 92vw); z-index: 41;
+    background: var(--surface); box-shadow: -8px 0 32px rgba(16,24,40,.18);
+    display: flex; flex-direction: column; animation: slideIn .18s ease-out;
+  }
+  @keyframes slideIn { from { transform: translateX(24px); opacity: .5; } to { transform: none; opacity: 1; } }
+  .drawer-head {
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+    padding: 20px 22px 16px; border-bottom: 1px solid var(--border);
+  }
+  .drawer-kicker { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  .drawer-head h2 { margin: 0; font-size: 17px; font-weight: 650; word-break: break-all; }
+  .icon-btn { border: 0; background: var(--surface-2); border-radius: 8px; width: 32px; height: 32px; color: var(--muted); flex: none; }
+  .icon-btn:hover { background: #eceff3; color: var(--text); }
+  .drawer-body { overflow: auto; padding: 18px 22px 40px; }
+  .drawer-link {
+    display: inline-block; margin-bottom: 18px; background: var(--primary-soft); color: var(--primary);
+    border: 1px solid #c7e0fb; border-radius: 8px; padding: 8px 14px; text-decoration: none; font-size: 13px;
+  }
+  .drawer-link:hover { background: #d9eaff; }
+  .detail-list { margin: 0; display: grid; grid-template-columns: 1fr; gap: 0; }
+  .detail-list dt {
+    font-size: 11.5px; color: var(--muted); margin-top: 14px; padding-bottom: 4px;
+    border-bottom: 1px dashed var(--border);
+  }
+  .detail-list dd { margin: 7px 0 0; font-size: 13px; line-height: 1.75; white-space: pre-wrap; word-break: break-word; }
+
+  /* ---------- 提示 / 致命错误 ---------- */
+  .toast {
+    position: fixed; left: 50%; bottom: 28px; transform: translate(-50%, 12px); z-index: 60;
+    background: #24292f; color: #fff; border-radius: 9px; padding: 10px 18px; font-size: 13px;
+    opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s;
+    box-shadow: 0 8px 24px rgba(0,0,0,.2);
+  }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+  .toast.error { background: #b42318; }
+  .fatal {
+    position: fixed; inset: 0; z-index: 80; background: rgba(245,246,248,.96);
+    display: flex; align-items: center; justify-content: center; padding: 24px;
+  }
+  .fatal-card {
+    background: #fff; border: 1px solid var(--border); border-radius: 12px;
+    box-shadow: var(--shadow); padding: 28px 32px; max-width: 560px;
+  }
+  .fatal-card h3 { margin: 0 0 10px; font-size: 16px; }
+  .fatal-card p { color: var(--muted); margin: 6px 0; font-size: 13px; }
+  .fatal-card code { background: var(--surface-2); padding: 2px 6px; border-radius: 5px; }
+
+  @media (max-width: 900px) {
+    .wrap { padding: 16px 14px 30px; }
+    .table-wrap { max-height: calc(100vh - 260px); }
+    .sep { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">GH</div>
+      <div>
+        <h1>GitHub 榜单数据浏览器</h1>
+        <p class="subtitle" id="dsSubtitle">每日新增收藏 · 累计下载</p>
+      </div>
+    </div>
+    <div class="top-actions">
+      <span class="file-chip" id="fileChip" title="当前数据文件">—</span>
+      <button class="btn" id="reloadBtn" title="不重启服务，重新读取两个 CSV">重新读取</button>
+    </div>
+  </header>
+
+  <nav class="tabs" id="tabs"></nav>
+
+  <section class="overview" id="overview"></section>
+
+  <section class="toolbar">
+    <div class="search-wrap">
+      <span class="icon">⌕</span>
+      <input id="search" type="text" autocomplete="off" placeholder="搜索仓库名 / 描述 / 功能…">
+      <button class="clear-x" id="clearSearch" title="清除搜索">×</button>
+    </div>
+
+    <div class="tool-group" id="dateGroup">
+      <label for="datePick">日期</label>
+      <input type="date" id="datePick">
+      <button class="mini-btn" id="prevDay" title="前一天">◀</button>
+      <button class="mini-btn" id="nextDay" title="后一天">▶</button>
+      <button class="mini-btn" id="latestDay" title="跳到最新一天">最新</button>
+      <button class="mini-btn" id="clearDate" title="清除日期筛选">清除</button>
+    </div>
+
+    <div class="sep"></div>
+
+    <div class="tool-group">
+      <label for="sortSel">排序</label>
+      <select id="sortSel"></select>
+      <select id="orderSel" title="排序方向">
+        <option value="desc">降序</option>
+        <option value="asc">升序</option>
+      </select>
+    </div>
+
+    <div class="col-menu">
+      <button class="btn" id="colBtn">列显示 ▾</button>
+      <div class="col-panel" id="colPanel" hidden></div>
+    </div>
+
+    <div class="tool-group">
+      <label for="langSel">描述</label>
+      <select id="langSel" title="项目描述的显示语言">
+        <option value="zh">中文</option>
+        <option value="en">英文原文</option>
+      </select>
+    </div>
+
+    <div class="tool-group">
+      <label for="sizeSel">每页</label>
+      <select id="sizeSel">
+        <option value="10">10 条</option>
+        <option value="20">20 条</option>
+        <option value="50">50 条</option>
+        <option value="100">100 条</option>
+      </select>
+    </div>
+  </section>
+
+  <div class="status-line">
+    <div class="meta-line" id="metaLine"></div>
+    <div class="zh-box" id="zhBox">
+      <span id="zhText">中文对照表加载中…</span>
+      <span class="zh-bar" id="zhBarWrap" hidden><i id="zhBar" style="width:0%"></i></span>
+      <button class="mini-action" id="zhStart" hidden>汉化全部</button>
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <div id="loading" hidden><div class="loading-pill">加载中…</div></div>
+    <table>
+      <thead><tr id="headRow"></tr></thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+
+  <footer class="pager" id="pager"></footer>
+  <div class="hint">提示：点击任意一行查看全部字段 · 用 ← → 键翻页 · Esc 关闭详情</div>
+</div>
+
+<div class="backdrop" id="backdrop" hidden></div>
+<aside class="drawer" id="drawer" hidden>
+  <div class="drawer-head" id="drawerHead"></div>
+  <div class="drawer-body" id="drawerBody"></div>
+</aside>
+
+<div class="toast" id="toast"></div>
+
+<div class="fatal" id="fatal" hidden>
+  <div class="fatal-card">
+    <h3>无法连接到数据服务</h3>
+    <p id="fatalMsg">—</p>
+    <p>请确认 <code>app.py</code> 正在运行，然后刷新本页；不要直接用双击的方式打开这个 HTML 文件。</p>
+    <p>启动命令：<code>python app.py</code></p>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+const $ = (sel) => document.querySelector(sel);
+const $$ = (sel) => Array.from(document.querySelectorAll(sel));
+
+function escapeHtml(v) {
+  if (v === null || v === undefined) return '';
+  return String(v).replace(/[&<>"']/g, (ch) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[ch]));
+}
+function safeUrl(v) {
+  const s = String(v === null || v === undefined ? '' : v).trim();
+  return /^https?:\/\//i.test(s) ? s : '';
+}
+function fmtInt(v) {
+  if (v === null || v === undefined) return '';
+  const s = String(v).trim();
+  if (!/^\d+$/.test(s)) return s;
+  return s.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+function compactHint(v) {
+  const s = String(v === null || v === undefined ? '' : v).trim();
+  if (!/^\d+$/.test(s)) return '';
+  const n = Number(s);
+  if (n >= 1e8) return '约 ' + (n / 1e8).toFixed(2) + ' 亿';
+  if (n >= 1e4) return '约 ' + (n / 1e4).toFixed(2) + ' 万';
+  return '';
+}
+
+const state = {
+  dataset: 'stars', page: 1, size: 20, q: '', date: '',
+  sort: '', order: 'desc', lang: 'zh',
+  meta: null, ds: null, visible: {}, result: null, reqId: 0
+};
+
+async function api(path) {
+  const res = await fetch(path, { cache: 'no-store' });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const data = await res.json();
+  if (data && data.error) throw new Error(data.error);
+  return data;
+}
+
+function getDs(id) { return state.meta.datasets.find((d) => d.id === id); }
+function visibleCols() { return state.ds.columns.filter((c) => state.visible[c.key]); }
+
+/* ---------------- 页签 / 配置 ---------------- */
+
+function buildTabs() {
+  $('#tabs').innerHTML = state.meta.datasets.map((d) =>
+    '<button class="tab" data-id="' + d.id + '">' +
+      '<span class="tab-title">' + escapeHtml(d.title) + '</span>' +
+      '<span class="tab-count">' + d.total.toLocaleString('zh-CN') + ' 条</span>' +
+    '</button>'
+  ).join('');
+  $$('.tab').forEach((b) => b.addEventListener('click', () => switchDataset(b.dataset.id)));
+}
+
+function loadVisible(id, ds) {
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem('ghv.cols.' + id) || 'null'); } catch (e) {}
+  const map = {};
+  ds.columns.forEach((c) => {
+    map[c.key] = (saved && typeof saved[c.key] === 'boolean') ? saved[c.key] : c.visible;
+  });
+  state.visible = map;
+}
+function saveVisible(id) {
+  try { localStorage.setItem('ghv.cols.' + id, JSON.stringify(state.visible)); } catch (e) {}
+}
+
+function switchDataset(id, keepFilters) {
+  state.dataset = id;
+  state.ds = getDs(id);
+  state.page = 1;
+  state.result = null;
+  $('#tbody').innerHTML = '';
+  $('#pager').innerHTML = '';
+  if (!keepFilters) {
+    state.q = ''; state.date = ''; state.sort = ''; state.order = 'desc';
+  }
+  if (location.hash.replace(/^#/, '') !== id) {
+    history.replaceState(null, '', '#' + id);
+  }
+  loadVisible(id, state.ds);
+  applyDatasetUI();
+  load();
+}
+
+function applyDatasetUI() {
+  $$('.tab').forEach((b) => b.classList.toggle('active', b.dataset.id === state.dataset));
+  const ds = state.ds;
+
+  $('#fileChip').textContent = ds.file;
+  $('#fileChip').title = '数据目录：' + (state.meta.dataDir || '') + '\n文件：' + ds.file;
+  $('#dsSubtitle').textContent = ds.subtitle;
+
+  $('#overview').innerHTML = ds.stats.map((s) =>
+    '<div class="stat"><div class="stat-label">' + escapeHtml(s.label) +
+    '</div><div class="stat-value">' + escapeHtml(s.value) + '</div></div>'
+  ).join('');
+
+  $('#sortSel').innerHTML = '<option value="">默认排序</option>' + ds.sortOptions.map((o) =>
+    '<option value="' + escapeHtml(o.key) + '">' + escapeHtml(o.label) + '</option>'
+  ).join('');
+  $('#sortSel').value = state.sort;
+  $('#orderSel').value = state.order;
+
+  $('#dateGroup').hidden = !ds.hasDate;
+  const dp = $('#datePick');
+  dp.min = ds.dateMin || ''; dp.max = ds.dateMax || ''; dp.value = state.date;
+
+  $('#search').value = state.q;
+  $('#search').placeholder = ds.hasDate
+    ? '搜索仓库名 / 描述 / 功能 / 下载来源…'
+    : '搜索项目名 / 描述 / 功能…';
+  $('#sizeSel').value = String(state.size);
+  $('#langSel').value = state.lang;
+
+  renderColumnPanel();
+  renderHead();
+}
+
+function renderColumnPanel() {
+  const panel = $('#colPanel');
+  panel.innerHTML = state.ds.columns.map((c) =>
+    '<label class="col-item"><input type="checkbox" data-key="' + escapeHtml(c.key) + '"' +
+    (state.visible[c.key] ? ' checked' : '') + '><span>' + escapeHtml(c.label) + '</span></label>'
+  ).join('') +
+  '<div class="col-actions"><button type="button" id="colAll">全部显示</button>' +
+  '<button type="button" id="colReset">恢复默认</button></div>';
+
+  panel.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
+    cb.addEventListener('change', () => {
+      state.visible[cb.dataset.key] = cb.checked;
+      saveVisible(state.dataset);
+      renderHead(); renderRows();
+    });
+  });
+  $('#colAll').addEventListener('click', () => {
+    state.ds.columns.forEach((c) => { state.visible[c.key] = true; });
+    saveVisible(state.dataset); renderColumnPanel(); renderHead(); renderRows();
+  });
+  $('#colReset').addEventListener('click', () => {
+    state.ds.columns.forEach((c) => { state.visible[c.key] = c.visible; });
+    saveVisible(state.dataset); renderColumnPanel(); renderHead(); renderRows();
+  });
+}
+
+/* ---------------- 表格 ---------------- */
+
+function renderHead() {
+  $('#headRow').innerHTML = visibleCols().map((c) =>
+    '<th style="min-width:' + c.width + 'px">' + escapeHtml(c.label) + '</th>'
+  ).join('') + '<th class="th-detail" style="min-width:80px">操作</th>';
+}
+
+function renderCell(c, row) {
+  const raw = row[c.key];
+  const val = (raw === null || raw === undefined) ? '' : String(raw);
+  const empty = '<span class="muted">—</span>';
+
+  if (c.type === 'int') {
+    if (!val.trim()) return '<td class="num">' + empty + '</td>';
+    const hint = compactHint(val);
+    const title = hint ? ' title="' + escapeHtml(hint) + '"' : '';
+    const text = escapeHtml(fmtInt(val));
+    if (c.emphasis) return '<td class="num"' + title + '><span class="hot-badge">' +
+      (c.plus ? '+' : '') + text + '</span></td>';
+    return '<td class="num"' + title + '>' + text + '</td>';
+  }
+  if (c.type === 'date') {
+    return '<td class="mono">' + (val.trim() ? escapeHtml(val) : empty) + '</td>';
+  }
+  if (c.type === 'link') {
+    const name = val.trim() ? val : '—';
+    const url = safeUrl(row[state.ds.linkCol]);
+    const html = url
+      ? '<a class="repo-link" href="' + escapeHtml(url) + '" target="_blank" rel="noopener noreferrer" title="' +
+        escapeHtml(url) + '">' + escapeHtml(name) + '<span class="ext">↗</span></a>'
+      : escapeHtml(name);
+    return '<td class="name-cell">' + html + '</td>';
+  }
+  if (c.type === 'url') {
+    const url = safeUrl(val);
+    if (!url) {
+      return '<td>' + (val.trim()
+        ? '<span class="cell-text" style="max-width:' + c.width + 'px" title="' + escapeHtml(val) + '">' + escapeHtml(val) + '</span>'
+        : empty) + '</td>';
+    }
+    return '<td><a class="url-link" href="' + escapeHtml(url) + '" target="_blank" rel="noopener noreferrer" ' +
+      'title="' + escapeHtml(val) + '" style="max-width:' + c.width + 'px">' + escapeHtml(val) + '</a></td>';
+  }
+  if (!val.trim()) return '<td>' + empty + '</td>';
+  return '<td><span class="cell-text" style="max-width:' + c.width + 'px" title="' +
+    escapeHtml(val) + '">' + escapeHtml(val) + '</span></td>';
+}
+
+function renderRows() {
+  const tbody = $('#tbody');
+  if (!state.result) { tbody.innerHTML = ''; return; }
+  const cols = visibleCols();
+  const rows = state.result.rows;
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="' + (cols.length + 1) +
+      '"><div class="empty">没有匹配的数据。试试清除搜索词或日期筛选。</div></td></tr>';
+    return;
+  }
+  tbody.innerHTML = rows.map((r, i) =>
+    '<tr data-i="' + i + '">' + cols.map((c) => renderCell(c, r)).join('') +
+    '<td><button class="detail-btn" data-i="' + i + '">详情 ›</button></td></tr>'
+  ).join('');
+}
+
+/* ---------------- 分页 ---------------- */
+
+function pageWindow(page, pages) {
+  const out = [];
+  const add = (a, b) => { for (let i = a; i <= b; i++) out.push(i); };
+  if (pages <= 7) { add(1, pages); return out; }
+  out.push(1);
+  const s = Math.max(2, page - 2), e = Math.min(pages - 1, page + 2);
+  if (s > 2) out.push('…');
+  add(s, e);
+  if (e < pages - 1) out.push('…');
+  out.push(pages);
+  return out;
+}
+
+function renderPager() {
+  const r = state.result;
+  if (!r) { $('#pager').innerHTML = ''; return; }
+  const btns = pageWindow(r.page, r.pages).map((p) => p === '…'
+    ? '<span class="ellipsis">…</span>'
+    : '<button class="page-btn' + (p === r.page ? ' active' : '') + '" data-p="' + p + '">' + p + '</button>'
+  ).join('');
+
+  $('#pager').innerHTML =
+    '<div class="pager-info">共 <b>' + fmtInt(r.total) + '</b> 条 · 显示 ' + r.from + '–' + r.to +
+      ' 条 · 第 <b>' + r.page + '</b> / ' + r.pages + ' 页</div>' +
+    '<div class="pager-ctrl">' +
+      '<button class="page-btn" data-p="1"' + (r.page <= 1 ? ' disabled' : '') + '>首页</button>' +
+      '<button class="page-btn" data-p="' + (r.page - 1) + '"' + (r.page <= 1 ? ' disabled' : '') + '>‹ 上一页</button>' +
+      btns +
+      '<button class="page-btn" data-p="' + (r.page + 1) + '"' + (r.page >= r.pages ? ' disabled' : '') + '>下一页 ›</button>' +
+      '<button class="page-btn" data-p="' + r.pages + '"' + (r.page >= r.pages ? ' disabled' : '') + '>末页</button>' +
+      '<span class="jump">跳至 <input type="number" id="jumpInput" min="1" max="' + r.pages +
+        '" value="' + r.page + '"> 页</span>' +
+    '</div>';
+
+  $('#pager').querySelectorAll('button[data-p]').forEach((b) =>
+    b.addEventListener('click', () => go(Number(b.dataset.p))));
+  const ji = $('#jumpInput');
+  ji.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(Number(ji.value)); });
+  ji.addEventListener('change', () => go(Number(ji.value)));
+}
+
+function go(p) {
+  if (!state.result) return;
+  const n = Math.max(1, Math.min(state.result.pages, Number(p) || 1));
+  if (n === state.page) return;
+  state.page = n;
+  load();
+}
+
+function buildMetaLine(r) {
+  const bits = [];
+  if (state.q) bits.push('关键词「' + state.q + '」');
+  if (state.date) bits.push('日期 ' + state.date);
+  if (state.sort) {
+    const c = state.ds.columns.find((x) => x.key === state.sort);
+    bits.push('按 ' + (c ? c.label : state.sort) + (state.order === 'asc' ? ' 升序' : ' 降序'));
+  }
+  bits.push('描述：' + (state.lang === 'zh' ? '中文' : '英文原文'));
+  return (bits.length ? '当前筛选：' + bits.join(' · ') + ' · ' : '') + '共 ' + fmtInt(r.total) + ' 条结果';
+}
+
+/* ---------------- 加载 ---------------- */
+
+async function load() {
+  const reqId = ++state.reqId;
+  $('#loading').hidden = false;
+  const p = new URLSearchParams({
+    dataset: state.dataset, page: state.page, size: state.size,
+    q: state.q, date: state.date, sort: state.sort, order: state.order,
+    lang: state.lang
+  });
+  try {
+    const data = await api('/api/rows?' + p.toString());
+    if (reqId !== state.reqId) return;
+    state.result = data;
+    state.page = data.page;
+    renderRows();
+    renderPager();
+    $('#metaLine').textContent = buildMetaLine(data);
+  } catch (e) {
+    if (reqId !== state.reqId) return;
+    toast('加载失败：' + e.message, true);
+    $('#tbody').innerHTML = '<tr><td colspan="20"><div class="empty">数据加载失败：' +
+      escapeHtml(e.message) + '</div></td></tr>';
+  } finally {
+    if (reqId === state.reqId) $('#loading').hidden = true;
+  }
+}
+
+/* ---------------- 详情抽屉 ---------------- */
+
+function openDrawer(i) {
+  if (!state.result || !state.result.rows[i]) return;
+  const row = state.result.rows[i];
+  const ds = state.ds;
+  const name = String(row[ds.nameCol] || '（无名称）');
+  const url = safeUrl(row[ds.linkCol]);
+  const idx = state.result.from + i;
+
+  $('#drawerHead').innerHTML =
+    '<div><div class="drawer-kicker">' + escapeHtml(ds.title) + ' · 第 ' + idx + ' 条</div>' +
+    '<h2>' + escapeHtml(name) + '</h2></div>' +
+    '<button class="icon-btn" id="drawerClose" title="关闭">✕</button>';
+
+  let body = '';
+  if (url) body += '<a class="drawer-link" href="' + escapeHtml(url) +
+    '" target="_blank" rel="noopener noreferrer">在 GitHub 打开仓库 ↗</a>';
+  body += '<dl class="detail-list">' + ds.columns.map((c) => {
+    const raw = row[c.key];
+    const val = (raw === null || raw === undefined) ? '' : String(raw);
+    let shown;
+    if (!val.trim()) shown = '<span class="muted">（空）</span>';
+    else if (c.type === 'int') shown = '<span class="mono">' + escapeHtml(fmtInt(val)) + '</span>';
+    else if (c.type === 'url' && safeUrl(val))
+      shown = '<a class="url-link" href="' + escapeHtml(safeUrl(val)) +
+        '" target="_blank" rel="noopener noreferrer">' + escapeHtml(val) + '</a>';
+    else shown = escapeHtml(val);
+    return '<dt>' + escapeHtml(c.label) + '</dt><dd>' + shown + '</dd>';
+  }).join('') + '</dl>';
+
+  $('#drawerBody').innerHTML = body;
+  $('#drawerClose').addEventListener('click', closeDrawer);
+  $('#drawer').hidden = false;
+  $('#backdrop').hidden = false;
+  document.body.classList.add('no-scroll');
+}
+function closeDrawer() {
+  $('#drawer').hidden = true;
+  $('#backdrop').hidden = true;
+  document.body.classList.remove('no-scroll');
+}
+
+/* ---------------- 提示 ---------------- */
+
+let toastTimer;
+function toast(msg, isError) {
+  const el = $('#toast');
+  el.textContent = msg;
+  el.classList.toggle('error', !!isError);
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2600);
+}
+
+/* ---------------- 中文对照表状态 ---------------- */
+
+let lastZhCached = -1;
+let zhPolling = false;
+
+async function refreshZhStatus() {
+  if (zhPolling) return;
+  zhPolling = true;
+  try {
+    const s = await api('/api/zh-status');
+    const total = s.total || 0;
+    $('#zhText').innerHTML = total
+      ? '中文对照 <b>' + s.cached.toLocaleString('zh-CN') + '</b> / ' +
+        total.toLocaleString('zh-CN') + '（' + s.percent + '%）' +
+        (s.running ? ' · 正在汉化…' : '')
+      : '中文对照表已就绪';
+    $('#zhBarWrap').hidden = !total;
+    $('#zhBar').style.width = (s.percent || 0) + '%';
+    const btn = $('#zhStart');
+    btn.hidden = !total || s.cached >= total || s.running;
+    btn.textContent = s.running ? '汉化中…' : '汉化全部';
+    btn.disabled = !!s.running;
+    // 后台翻译产生新条目时自动刷新当前页
+    if (s.running || (lastZhCached >= 0 && s.cached > lastZhCached)) load();
+    lastZhCached = s.cached;
+  } catch (e) {
+    $('#zhText').textContent = '中文对照表状态未知';
+  } finally {
+    zhPolling = false;
+  }
+}
+
+$('#zhStart').addEventListener('click', async () => {
+  try {
+    const res = await fetch('/api/translate/start', { method: 'POST' });
+    const d = await res.json();
+    if (!res.ok || d.error) throw new Error(d.error || ('HTTP ' + res.status));
+    toast(d.message || '已开始汉化，页面会自动更新');
+    setTimeout(refreshZhStatus, 600);
+  } catch (e) {
+    toast('启动汉化失败：' + e.message, true);
+  }
+});
+
+/* ---------------- 事件绑定 ---------------- */
+
+let searchTimer;
+$('#search').addEventListener('input', (e) => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => {
+    state.q = e.target.value.trim();
+    state.page = 1;
+    load();
+  }, 260);
+});
+$('#clearSearch').addEventListener('click', () => {
+  clearTimeout(searchTimer);
+  $('#search').value = '';
+  state.q = ''; state.page = 1; load();
+});
+
+$('#datePick').addEventListener('change', (e) => {
+  state.date = e.target.value; state.page = 1; load();
+});
+function shiftDate(delta) {
+  const ds = state.ds;
+  const base = $('#datePick').value || ds.dateMax;
+  if (!base) return;
+  const d = new Date(base + 'T00:00:00Z');
+  if (isNaN(d.getTime())) return;
+  d.setUTCDate(d.getUTCDate() + delta);
+  const s = d.toISOString().slice(0, 10);
+  if (ds.dateMin && s < ds.dateMin) return;
+  if (ds.dateMax && s > ds.dateMax) return;
+  state.date = s; $('#datePick').value = s; state.page = 1; load();
+}
+$('#prevDay').addEventListener('click', () => shiftDate(-1));
+$('#nextDay').addEventListener('click', () => shiftDate(1));
+$('#latestDay').addEventListener('click', () => {
+  state.date = state.ds.dateMax || '';
+  $('#datePick').value = state.date; state.page = 1; load();
+});
+$('#clearDate').addEventListener('click', () => {
+  state.date = ''; $('#datePick').value = ''; state.page = 1; load();
+});
+
+$('#sortSel').addEventListener('change', (e) => {
+  state.sort = e.target.value; state.page = 1; load();
+});
+$('#orderSel').addEventListener('change', (e) => {
+  state.order = e.target.value; state.page = 1; load();
+});
+$('#sizeSel').addEventListener('change', (e) => {
+  state.size = Number(e.target.value) || 20; state.page = 1; load();
+});
+$('#langSel').addEventListener('change', (e) => {
+  state.lang = e.target.value; state.page = 1; load();
+});
+
+$('#colBtn').addEventListener('click', (e) => {
+  e.stopPropagation();
+  $('#colPanel').hidden = !$('#colPanel').hidden;
+});
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.col-menu')) $('#colPanel').hidden = true;
+});
+
+$('#tbody').addEventListener('click', (e) => {
+  if (e.target.closest('a')) return;
+  const tr = e.target.closest('tr[data-i]');
+  if (tr) openDrawer(Number(tr.dataset.i));
+});
+$('#backdrop').addEventListener('click', closeDrawer);
+
+$('#reloadBtn').addEventListener('click', async () => {
+  const btn = $('#reloadBtn');
+  btn.disabled = true; btn.textContent = '读取中…';
+  try {
+    const data = await api('/api/reload');
+    state.meta = data.meta;
+    state.ds = getDs(state.dataset) || state.meta.datasets[0];
+    state.dataset = state.ds.id;
+    buildTabs();
+    applyDatasetUI();
+    await load();
+    toast('已从 CSV 重新读取数据');
+  } catch (e) {
+    toast('重新读取失败：' + e.message, true);
+  } finally {
+    btn.disabled = false; btn.textContent = '重新读取';
+  }
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') { closeDrawer(); $('#colPanel').hidden = true; return; }
+  if (e.target.matches('input, select, textarea')) return;
+  if (e.key === 'ArrowLeft')  { e.preventDefault(); go(state.page - 1); }
+  if (e.key === 'ArrowRight') { e.preventDefault(); go(state.page + 1); }
+});
+
+/* ---------------- 启动 ---------------- */
+
+(async function init() {
+  try {
+    state.meta = await api('/api/meta');
+    buildTabs();
+    const wanted = location.hash.replace(/^#/, '');
+    switchDataset(getDs(wanted) ? wanted : 'stars');
+    refreshZhStatus();
+    setInterval(refreshZhStatus, 4000);
+    window.addEventListener('hashchange', () => {
+      const id = location.hash.replace(/^#/, '');
+      if (getDs(id) && id !== state.dataset) switchDataset(id);
+    });
+  } catch (e) {
+    $('#fatal').hidden = false;
+    $('#fatalMsg').textContent = e.message;
+  }
+})();
+</script>
+</body>
+</html>
